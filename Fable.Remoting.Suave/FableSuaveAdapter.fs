@@ -78,8 +78,8 @@ module FableSuaveAdapter =
                 return json dynamicResult
             }  
             |> Async.RunSynchronously
-    
-    let webPartWithBuilderFor implementation (routeBuilder: string -> string -> string) : WebPart = 
+            
+    let webPartWithFilterFor implementation (filterBuilder: string -> string -> WebPart) : WebPart = 
         let builder = StringBuilder()
         let typeName = implementation.GetType().Name
         write builder (sprintf "Building Routes for %s" typeName)
@@ -87,13 +87,17 @@ module FableSuaveAdapter =
         |> FSharpType.GetRecordFields
         |> Seq.map (fun propInfo -> 
             let methodName = propInfo.Name
-            let fullPath = routeBuilder typeName methodName
+            let filter = filterBuilder typeName methodName
             write builder (sprintf "Record field %s maps to route %s" methodName fullPath)
-            POST >=> path fullPath >=> request (handleRequest methodName implementation)
+            filter >=> request (handleRequest methodName implementation)
         )
         |> List.ofSeq
         |> fun routes ->
             logger |> Option.iter (fun logf -> logf (builder.ToString()))
-            choose routes
+            choose routes            
+    
+    let webPartWithBuilderFor implementation (routeBuilder: string -> string -> string) : WebPart = 
+        webPartWithFilterFor implementation (fun typeName methodName -> POST >=> path (routeBuilder typeName methodName))
+            
     let webPartFor implementation : WebPart = 
         webPartWithBuilderFor implementation (sprintf "/%s/%s")
